@@ -65,13 +65,23 @@ def search_box(lat: float, lng: float, target_m: float) -> Dict[str, float]:
 
 
 def nearest_node(conn: Connection, lat: float, lng: float) -> Tuple[int, float]:
-    """가장 가까운 도로 노드의 id와 거리(m)."""
+    """가장 가까운 도로 노드의 id와 거리(m).
+
+    geometry끼리의 <->는 도(degree) 단위라 동서 방향이 실제보다 약 1.24배 가깝게 계산된다.
+    인덱스로 가까운 20개를 먼저 추린 뒤, 거리 제한과 같은 미터 기준으로 다시 정렬한다.
+    (geography로 바로 정렬하면 정확하지만 쿼리당 20ms로 35배 느렸다)
+    """
     row = conn.execute(
         """
-        SELECT id, ST_Distance(the_geom::geography, p.geom::geography)
-        FROM routing.ways_vertices_pgr,
-             (SELECT ST_SetSRID(ST_MakePoint(%(lng)s, %(lat)s), 4326) AS geom) p
-        ORDER BY the_geom <-> p.geom
+        SELECT id, distance_m
+        FROM (
+            SELECT v.id, ST_Distance(v.the_geom::geography, p.geom::geography) AS distance_m
+            FROM routing.ways_vertices_pgr v,
+                 (SELECT ST_SetSRID(ST_MakePoint(%(lng)s, %(lat)s), 4326) AS geom) p
+            ORDER BY v.the_geom <-> p.geom
+            LIMIT 20
+        ) nearest
+        ORDER BY distance_m
         LIMIT 1
         """,
         {"lat": lat, "lng": lng},

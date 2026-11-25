@@ -3,7 +3,8 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config
+from app import config, routing
+from app.db import pool
 from app.main import app
 
 DAEJEON_UNIV = {"lat": 36.3321, "lng": 127.4562}
@@ -45,6 +46,24 @@ def test_out_of_service_area_returns_400(client):
 ])
 def test_invalid_request_returns_422(client, body):
     assert client.post("/recommend", json=body).status_code == 422
+
+
+@needs_db
+@pytest.mark.parametrize("lat,lng", [
+    (36.3321, 127.4562), (36.3323, 127.4344), (36.3105, 127.4720), (36.3500, 127.4400), (36.2900, 127.4600),
+    (36.3700, 127.4800), (36.3200, 127.4450), (36.3400, 127.4650), (36.3050, 127.4500), (36.3600, 127.4300),
+])
+def test_nearest_node_is_closest_in_meters(client, lat, lng):
+    # 도(degree) 기준이 아니라 미터 기준으로 가장 가까운 노드여야 한다 (전체를 훑어 구한 정답과 비교)
+    with pool.connection() as conn:
+        node, distance_m = routing.nearest_node(conn, lat, lng)
+        expected = conn.execute(
+            """
+            SELECT id, ST_Distance(the_geom::geography, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography) AS d
+            FROM routing.ways_vertices_pgr ORDER BY d LIMIT 1
+            """, (lng, lat)).fetchone()
+    assert node == expected[0]
+    assert distance_m == pytest.approx(expected[1])
 
 
 @needs_db
