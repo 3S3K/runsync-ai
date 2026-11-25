@@ -2,6 +2,8 @@
 import os
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://runsync:1234@localhost:5432/runsync")
+# 심박 예측 모델 파일. `python -m app.train`으로 만든다
+MODEL_PATH = os.environ.get("MODEL_PATH", "models/hr_model.joblib")
 
 # 서비스 범위: 대전 동구 행정구역 + 약 2km 여유 (전처리 범위와 같다)
 SERVICE_MIN_LAT, SERVICE_MAX_LAT = 36.18, 36.46
@@ -32,15 +34,15 @@ MAX_DISTANCE_ERROR = 0.3
 # 탐색 범위: 출발지 기준 목표 거리의 이 비율만큼 사방으로
 SEARCH_BOX_RATIO = 0.6
 
+# 강도별 목표 운동 강도 구간 (최대 심박 대비 %)
+INTENSITY_ZONE_PCT = {"EASY": (60.0, 70.0), "NORMAL": (70.0, 80.0), "HARD": (80.0, 90.0)}
+
 # 점수(낮을수록 좋음)
 #   = W_DISTANCE × |거리 − 목표|/목표 + W_OVERLAP × 왕복 중복률
-#   + W_CLIMB × |1km당 오르막 − 강도별 목표|
+#   + W_INTENSITY × |예상 강도 − 목표 구간의 중앙| (%p)
 W_DISTANCE = 1.0
 W_OVERLAP = 0.5
-# 강도별로 선호하는 1km당 누적 오르막(m). 심박 예측 모델을 붙이면 이 항은
-# |예상 강도 − 목표 강도|로 바뀐다. 그 전까지 강도 차이를 내기 위한 대체 항이다.
-TARGET_CLIMB_M_PER_KM = {"EASY": 0.0, "NORMAL": 15.0, "HARD": 30.0}
-W_CLIMB = 0.02
+W_INTENSITY = 0.05
 # 이미 고른 코스와 겹치는 구간 비율이 이보다 크면 같은 코스로 보고 건너뛴다
 MAX_SIMILARITY = 0.7
 TOP_N = 3

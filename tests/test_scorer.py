@@ -4,9 +4,14 @@ from app import config, scorer
 from app.routing import Candidate
 
 
-def candidate(distance_m, overlap=0.0, edges=(1, 2, 3), ascent_m=0.0):
-    return Candidate(bearing_deg=0, distance_m=distance_m, ascent_m=ascent_m, max_slope_pct=0,
-                     overlap_ratio=overlap, edge_ids=list(edges), coordinates=[])
+EASY_MID = sum(config.INTENSITY_ZONE_PCT["EASY"]) / 2
+
+
+def candidate(distance_m, overlap=0.0, edges=(1, 2, 3), hr_pct=EASY_MID):
+    # 기본 예상 강도를 EASY 구간 중앙으로 두면 EASY 점수에서 강도 항이 0이 된다
+    return Candidate(bearing_deg=0, distance_m=distance_m, ascent_m=0, max_slope_pct=0,
+                     overlap_ratio=overlap, edge_ids=list(edges), coordinates=[],
+                     predicted_hr_pct=hr_pct)
 
 
 def test_score_combines_distance_error_and_overlap():
@@ -14,26 +19,27 @@ def test_score_combines_distance_error_and_overlap():
     assert scorer.score(c, 5000, "EASY") == pytest.approx(config.W_DISTANCE * 0.1 + config.W_OVERLAP * 0.2)
 
 
-def test_score_is_zero_for_exact_distance_without_overlap_on_flat_easy_course():
+def test_score_is_zero_for_exact_distance_without_overlap_at_zone_center():
     assert scorer.score(candidate(5000), 5000, "EASY") == 0
 
 
-def test_climb_error_is_gap_from_intensity_target():
-    c = candidate(5000, ascent_m=100)  # 1km당 20m
-    assert scorer.climb_error(c, "EASY") == pytest.approx(20 - config.TARGET_CLIMB_M_PER_KM["EASY"])
-    assert scorer.climb_error(c, "HARD") == pytest.approx(abs(20 - config.TARGET_CLIMB_M_PER_KM["HARD"]))
+def test_intensity_error_is_gap_from_zone_center():
+    c = candidate(5000, hr_pct=72)
+    assert scorer.intensity_error(c, "EASY") == pytest.approx(7)     # 중앙 65
+    assert scorer.intensity_error(c, "NORMAL") == pytest.approx(3)   # 중앙 75
+    assert scorer.intensity_error(c, "HARD") == pytest.approx(13)    # 중앙 85
 
 
-def test_score_adds_weighted_climb_error():
-    c = candidate(5000, ascent_m=100)
-    assert scorer.score(c, 5000, "NORMAL") == pytest.approx(config.W_CLIMB * scorer.climb_error(c, "NORMAL"))
+def test_score_adds_weighted_intensity_error():
+    c = candidate(5000, hr_pct=72)
+    assert scorer.score(c, 5000, "NORMAL") == pytest.approx(config.W_INTENSITY * 3)
 
 
-def test_easy_prefers_flatter_course_and_hard_prefers_hillier():
-    flat = candidate(5000, edges=(1, 2), ascent_m=30)     # 1km당 6m
-    hilly = candidate(5000, edges=(3, 4), ascent_m=150)   # 1km당 30m
-    assert scorer.select_top([hilly, flat], 5000, "EASY") == [flat, hilly]
-    assert scorer.select_top([flat, hilly], 5000, "HARD") == [hilly, flat]
+def test_easy_prefers_lower_predicted_intensity_and_hard_prefers_higher():
+    gentle = candidate(5000, edges=(1, 2), hr_pct=68)
+    tough = candidate(5000, edges=(3, 4), hr_pct=82)
+    assert scorer.select_top([tough, gentle], 5000, "EASY") == [gentle, tough]
+    assert scorer.select_top([gentle, tough], 5000, "HARD") == [tough, gentle]
 
 
 def test_similarity_uses_shorter_course_as_base():

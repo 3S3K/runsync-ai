@@ -55,7 +55,7 @@ class CourseRes(CamelModel):
     distance_km: float
     elevation_gain_m: float
     max_slope_pct: float
-    predicted_hr_pct: Optional[float] = None  # 심박 예측 모델을 붙이기 전까지는 null
+    predicted_hr_pct: float  # 예상 운동 강도 (최대 심박 대비 %)
     intensity: Intensity
     reason: str
     geometry: Geometry

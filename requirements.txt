@@ -1,3 +1,5 @@
 fastapi
 uvicorn[standard]
 psycopg[binary,pool]
+scikit-learn
+lightgbm

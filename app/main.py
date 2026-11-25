@@ -3,13 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app import config, errors, explain, routing, scorer
+from app import config, errors, explain, features, model, routing, scorer
 from app.db import pool
 from app.schemas import CourseRes, ErrorRes, Geometry, RecommendReq, RecommendRes
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    model.load()
     pool.open()
     yield
     pool.close()
@@ -46,6 +47,16 @@ def create_recommendation(request: RecommendReq) -> RecommendRes:
         candidates = routing.generate_candidates(
             conn, start_node, lat, lng, request.target_distance_km, request.intensity.value)
 
+    if candidates:
+        user_part = features.user_features(request.user, request.recent_records)
+        rows = [
+            features.build_row(user_part, features.course_features(
+                c.distance_m / 1000, c.climb_m_per_km, c.max_slope_pct))
+            for c in candidates
+        ]
+        for candidate, predicted in zip(candidates, model.predict_hr_pct(rows)):
+            candidate.predicted_hr_pct = predicted
+
     selected = scorer.select_top(candidates, request.target_distance_km * 1000, request.intensity.value)
     if not selected:
         raise errors.course_not_found()
@@ -56,9 +67,11 @@ def create_recommendation(request: RecommendReq) -> RecommendRes:
             distance_km=round(candidate.distance_m / 1000, 2),
             elevation_gain_m=round(candidate.ascent_m, 1),
             max_slope_pct=round(candidate.max_slope_pct, 1),
+            predicted_hr_pct=round(candidate.predicted_hr_pct, 1),
             intensity=request.intensity,
             reason=explain.build_reason(
-                candidate, request.target_distance_km, request.intensity.value, request.recent_records),
+                candidate, request.target_distance_km, request.intensity.value, request.recent_records,
+                age=request.user.age if request.user else None),
             geometry=Geometry(coordinates=candidate.coordinates),
         )
         for rank, candidate in enumerate(selected, start=1)
