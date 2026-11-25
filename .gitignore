@@ -3,6 +3,10 @@ data/
 __pycache__/
 *.pyc
 .env
+.env.*
 
 # Claude Code
 CLAUDE.md
+
+# 노션에서 관리하는 문서
+docs/api.md
