@@ -4,6 +4,12 @@ import os
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://runsync:1234@localhost:5432/runsync")
 # 심박 예측 모델 파일. `python -m app.train`으로 만든다
 MODEL_PATH = os.environ.get("MODEL_PATH", "models/hr_model.joblib")
+# 모델 종류: lightgbm | ridge
+MODEL_KIND = os.environ.get("MODEL_KIND", "lightgbm")
+# 재학습 API를 호출할 수 있는 키. 백엔드와 같은 값을 둔다. 비어 있으면 재학습 API를 쓸 수 없다
+INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
+# 재학습 이력 파일 (한 줄에 한 건). 배포 서버에서는 logs 폴더가 컨테이너 밖에 보관된다
+TRAINING_LOG_PATH = os.environ.get("TRAINING_LOG_PATH", "logs/trainings.jsonl")
 
 # 서비스 범위: 대전 동구 행정구역 + 약 2km 여유 (전처리 범위와 같다)
 SERVICE_MIN_LAT, SERVICE_MAX_LAT = 36.18, 36.46
@@ -70,3 +76,24 @@ SLOPE_GRADE_STEEP_PCT = 10.0
 
 # 예상 심박수 범위의 폭. 모델의 검증 오차(MAE 약 2.5%p)만큼 위아래로 둔다
 HR_RANGE_MARGIN_PCT = 2.5
+
+# ----- 재학습 -----
+# 합성 데이터의 크기와 시드. 최초 학습과 재학습이 같은 합성 데이터를 쓴다
+SYNTHETIC_ROWS = 8000
+SYNTHETIC_SEED = 42
+# 실제 기록 1건을 합성 데이터 몇 건의 비중으로 볼지. 기록이 쌓일수록 실제 기록이 모델을 끌고 간다
+REAL_RECORD_WEIGHT = 10.0
+# 기록의 "평소 페이스·거리·케이던스"는 그 기록 직전 몇 회로 계산할지 (추천 요청과 같은 값)
+RECENT_RECORD_COUNT = 5
+# 학습에 쓰는 기록의 조건. 사용자가 손으로 입력한 값이라 범위를 벗어난 기록은 뺀다
+TRAIN_MIN_DISTANCE_KM = 1.0
+TRAIN_MIN_PACE_SEC_PER_KM, TRAIN_MAX_PACE_SEC_PER_KM = 180.0, 720.0   # 3'00" ~ 12'00"
+TRAIN_MIN_HR_PCT, TRAIN_MAX_HR_PCT = 40.0, 100.0                      # 최대 심박 대비 %
+TRAIN_MIN_CADENCE, TRAIN_MAX_CADENCE = 120, 220
+TRAIN_MIN_AGE, TRAIN_MAX_AGE = 10, 90
+# 교차 검증 묶음 수의 상한 (기록이 이보다 적으면 기록 수만큼 나눈다)
+CV_MAX_FOLDS = 5
+# 한 번의 재학습 요청으로 받을 수 있는 기록 수
+TRAIN_MAX_RECORDS = 50000
+# 이력 조회 때 돌려주는 최근 건수
+TRAINING_HISTORY_LIMIT = 50

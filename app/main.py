@@ -1,12 +1,15 @@
+import hmac
 from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 
-from app import config, detail, elevation, errors, explain, features, model, routing, scorer
+from app import config, detail, elevation, errors, explain, features, model, retrain, routing, scorer
 from app.db import pool
 from app.schemas import (
     Climb, CourseRes, ElevationPoint, ErrorRes, Geometry, RecommendReq, RecommendRes, SlopeSegment,
+    TrainingHistoryRes, TrainingReq, TrainingRes,
 )
 
 
@@ -29,6 +32,45 @@ async def handle_recommend_error(_: Request, exc: errors.RecommendError) -> JSON
 @app.get("/health")
 def get_health() -> dict:
     return {"status": "ok"}
+
+
+def require_internal_key(x_internal_api_key: Optional[str] = Header(default=None)) -> None:
+    """재학습 API는 서비스 중인 모델을 바꾸므로, 키를 아는 백엔드만 호출할 수 있다.
+
+    서버에 키가 설정돼 있지 않으면 누구나 호출할 수 있게 여는 대신 API 자체를 막는다.
+    """
+    if not config.INTERNAL_API_KEY:
+        raise errors.training_disabled()
+    if not x_internal_api_key or not hmac.compare_digest(
+            x_internal_api_key.encode(), config.INTERNAL_API_KEY.encode()):
+        raise errors.invalid_internal_key()
+
+
+TRAINING_ERRORS = {401: {"model": ErrorRes}, 503: {"model": ErrorRes}}
+
+
+@app.post(
+    "/model/trainings",
+    response_model=TrainingRes,
+    dependencies=[Depends(require_internal_key)],
+    responses=TRAINING_ERRORS,
+    summary="심박 예측 모델 재학습",
+    description="전달받은 러닝 기록을 선별해 합성 데이터와 함께 학습한다. "
+                "합성 데이터만으로 학습한 모델보다 실제 기록의 검증 오차가 작을 때만 서비스 중인 모델을 교체한다.",
+)
+def create_training(request: TrainingReq) -> TrainingRes:
+    return TrainingRes(**retrain.run(request.records))
+
+
+@app.get(
+    "/model/trainings",
+    response_model=TrainingHistoryRes,
+    summary="재학습 이력 조회",
+    dependencies=[Depends(require_internal_key)],
+    responses=TRAINING_ERRORS,
+)
+def get_trainings() -> TrainingHistoryRes:
+    return TrainingHistoryRes(trainings=[TrainingRes(**item) for item in retrain.history()])
 
 
 @app.post(

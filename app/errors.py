@@ -1,4 +1,4 @@
-"""추천 API가 돌려주는 업무 에러."""
+"""API가 돌려주는 업무 에러."""
 
 
 class RecommendError(Exception):
@@ -15,3 +15,11 @@ def out_of_service_area() -> RecommendError:
 
 def course_not_found() -> RecommendError:
     return RecommendError(404, "COURSE_NOT_FOUND", "이 위치에서는 조건에 맞는 코스를 만들지 못했어요.")
+
+
+def invalid_internal_key() -> RecommendError:
+    return RecommendError(401, "INVALID_INTERNAL_KEY", "내부 호출 키가 없거나 올바르지 않습니다.")
+
+
+def training_disabled() -> RecommendError:
+    return RecommendError(503, "TRAINING_DISABLED", "서버에 내부 호출 키가 설정되지 않아 재학습 API를 쓸 수 없습니다.")

@@ -1,11 +1,16 @@
 """요청·응답 모델. JSON은 백엔드와 맞춰 camelCase, 코드 안에서는 snake_case."""
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 from app import config
+
+
+# 서비스의 시각은 모두 한국 시간의 벽시계 값으로 다룬다 (백엔드와 같다)
+KST = timezone(timedelta(hours=9))
 
 
 class CamelModel(BaseModel):
@@ -88,6 +93,48 @@ class CourseRes(CamelModel):
 
 class RecommendRes(CamelModel):
     courses: List[CourseRes]
+
+
+class TrainingRecord(CamelModel):
+    """재학습에 쓰는 러닝 기록 한 건. 값의 범위는 여기서 막지 않고 선별 단계에서 걸러낸다."""
+    user_id: int
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    start_time: datetime
+    distance_km: float = Field(allow_inf_nan=False)
+    duration_sec: int
+    avg_heart_rate: Optional[int] = None
+    cadence: Optional[int] = None
+    elevation_gain_m: Optional[float] = Field(default=None, allow_inf_nan=False)
+
+    @field_validator("start_time")
+    @classmethod
+    def to_korea_wall_clock(cls, value: datetime) -> datetime:
+        """시간대가 붙은 값은 한국 시간으로 바꾸고, 없는 값은 한국 시간으로 본다.
+
+        시간대가 있는 값과 없는 값이 섞이면 서로 비교할 수 없어, 모두 시간대 없는 한국 시각으로 맞춘다.
+        """
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(KST).replace(tzinfo=None)
+
+
+class TrainingReq(CamelModel):
+    records: List[TrainingRecord] = Field(default_factory=list, max_length=config.TRAIN_MAX_RECORDS)
+
+
+class TrainingRes(CamelModel):
+    trained_at: str                         # 실행 시각 (한국 시간, ISO-8601)
+    received_count: int                     # 전달받은 기록 수
+    used_count: int                         # 선별을 통과해 학습에 쓴 기록 수
+    baseline_mae: Optional[float] = None    # 합성 데이터만으로 학습한 모델의 오차(%p)
+    candidate_mae: Optional[float] = None   # 실제 기록을 함께 학습한 모델의 교차 검증 오차(%p)
+    replaced: bool                          # 서비스 중인 모델을 교체했는지
+    reason: str
+
+
+class TrainingHistoryRes(CamelModel):
+    trainings: List[TrainingRes]            # 최근 실행부터
 
 
 class ErrorRes(BaseModel):
