@@ -24,6 +24,12 @@ def load(path: Optional[str] = None) -> None:
             f"모델 파일이 없습니다: {path}. 먼저 `python -m app.train`으로 학습하세요.") from exc
 
 
+def replace(new_model) -> None:
+    """재학습한 모델로 바꾼다. 서버를 다시 시작하지 않아도 다음 예측부터 새 모델을 쓴다."""
+    global _model
+    _model = new_model
+
+
 def predict_hr_pct(rows: Sequence[Sequence[float]]) -> List[float]:
     """피처 행들(app.features.FEATURE_NAMES 순서)에 대한 예상 운동 강도(최대 심박 대비 %)."""
     if _model is None:

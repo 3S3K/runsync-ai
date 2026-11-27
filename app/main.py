@@ -3,10 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app import config, detail, elevation, errors, explain, features, model, routing, scorer
+from app import config, detail, elevation, errors, explain, features, model, retrain, routing, scorer
 from app.db import pool
 from app.schemas import (
     Climb, CourseRes, ElevationPoint, ErrorRes, Geometry, RecommendReq, RecommendRes, SlopeSegment,
+    TrainingHistoryRes, TrainingReq, TrainingRes,
 )
 
 
@@ -29,6 +30,22 @@ async def handle_recommend_error(_: Request, exc: errors.RecommendError) -> JSON
 @app.get("/health")
 def get_health() -> dict:
     return {"status": "ok"}
+
+
+@app.post(
+    "/model/trainings",
+    response_model=TrainingRes,
+    summary="심박 예측 모델 재학습",
+    description="전달받은 러닝 기록을 선별해 합성 데이터와 함께 학습한다. "
+                "합성 데이터만으로 학습한 모델보다 실제 기록의 검증 오차가 작을 때만 서비스 중인 모델을 교체한다.",
+)
+def create_training(request: TrainingReq) -> TrainingRes:
+    return TrainingRes(**retrain.run(request.records))
+
+
+@app.get("/model/trainings", response_model=TrainingHistoryRes, summary="재학습 이력 조회")
+def get_trainings() -> TrainingHistoryRes:
+    return TrainingHistoryRes(trainings=[TrainingRes(**item) for item in retrain.history()])
 
 
 @app.post(

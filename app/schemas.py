@@ -1,4 +1,5 @@
 """요청·응답 모델. JSON은 백엔드와 맞춰 camelCase, 코드 안에서는 snake_case."""
+from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
@@ -88,6 +89,37 @@ class CourseRes(CamelModel):
 
 class RecommendRes(CamelModel):
     courses: List[CourseRes]
+
+
+class TrainingRecord(CamelModel):
+    """재학습에 쓰는 러닝 기록 한 건. 값의 범위는 여기서 막지 않고 선별 단계에서 걸러낸다."""
+    user_id: int
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    start_time: datetime
+    distance_km: float
+    duration_sec: int
+    avg_heart_rate: Optional[int] = None
+    cadence: Optional[int] = None
+    elevation_gain_m: Optional[float] = None
+
+
+class TrainingReq(CamelModel):
+    records: List[TrainingRecord] = Field(default_factory=list)
+
+
+class TrainingRes(CamelModel):
+    trained_at: str                         # 실행 시각 (한국 시간, ISO-8601)
+    received_count: int                     # 전달받은 기록 수
+    used_count: int                         # 선별을 통과해 학습에 쓴 기록 수
+    baseline_mae: Optional[float] = None    # 합성 데이터만으로 학습한 모델의 오차(%p)
+    candidate_mae: Optional[float] = None   # 실제 기록을 함께 학습한 모델의 교차 검증 오차(%p)
+    replaced: bool                          # 서비스 중인 모델을 교체했는지
+    reason: str
+
+
+class TrainingHistoryRes(CamelModel):
+    trainings: List[TrainingRes]            # 최근 실행부터
 
 
 class ErrorRes(BaseModel):

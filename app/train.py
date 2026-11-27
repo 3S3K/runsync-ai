@@ -8,6 +8,7 @@
 import argparse
 import os
 import warnings
+from typing import Optional
 
 import joblib
 import numpy as np
@@ -32,6 +33,16 @@ def build_model(kind: str):
     raise ValueError(f"알 수 없는 모델: {kind}")
 
 
+def fit_model(kind: str, X: np.ndarray, y: np.ndarray, sample_weight: Optional[np.ndarray] = None):
+    """모델을 만들어 학습한다. 표본 가중치는 모델 종류에 맞는 방식으로 넘긴다."""
+    model = build_model(kind)
+    if sample_weight is None:
+        return model.fit(X, y)
+    if kind == "ridge":
+        return model.fit(X, y, ridge__sample_weight=sample_weight)
+    return model.fit(X, y, sample_weight=sample_weight)
+
+
 def train(kind: str, n_rows: int, seed: int, out_path: str) -> float:
     X, y = synthetic.generate(n_rows, seed)
     X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=seed)
@@ -52,9 +63,9 @@ def train(kind: str, n_rows: int, seed: int, out_path: str) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="심박 예측 모델 학습")
-    parser.add_argument("--model", choices=("ridge", "lightgbm"), default="lightgbm")
-    parser.add_argument("--rows", type=int, default=8000)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--model", choices=("ridge", "lightgbm"), default=config.MODEL_KIND)
+    parser.add_argument("--rows", type=int, default=config.SYNTHETIC_ROWS)
+    parser.add_argument("--seed", type=int, default=config.SYNTHETIC_SEED)
     parser.add_argument("--out", default=config.MODEL_PATH)
     args = parser.parse_args()
     train(args.model, args.rows, args.seed, args.out)
