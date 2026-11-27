@@ -65,9 +65,10 @@ def create_recommendation(request: RecommendReq) -> RecommendRes:
         CourseRes(
             rank=rank,
             distance_km=round(candidate.distance_m / 1000, 2),
-            elevation_gain_m=round(candidate.ascent_m, 1),
+            # 누적 오르막과 예상 강도는 추천 이유 문장과 같은 정수로 내려 화면의 숫자가 어긋나지 않게 한다
+            elevation_gain_m=round(candidate.ascent_m),
             max_slope_pct=round(candidate.max_slope_pct, 1),
-            predicted_hr_pct=round(candidate.predicted_hr_pct, 1),
+            predicted_hr_pct=round(candidate.predicted_hr_pct),
             intensity=request.intensity,
             reason=explain.build_reason(
                 candidate, request.target_distance_km, request.intensity.value, request.recent_records,

@@ -24,7 +24,7 @@ def test_average_pace_without_records():
 
 def test_reason_without_records_or_age():
     reason = explain.build_reason(COURSE, 5.0, "NORMAL", [])
-    assert reason == ("목표 5km 기준 5.1km 순환 코스예요. 누적 오르막 38m, 최대 경사 6.4%예요. "
+    assert reason == ("목표 5km 기준 5.1km 순환 코스예요. 누적 오르막은 38m예요. "
                       "예상 운동 강도는 최대 심박의 74%로 '보통' 구간(70~80%)에 들어요.")
 
 
@@ -40,6 +40,12 @@ def test_reason_with_age_adds_bpm():
 ])
 def test_describe_intensity_says_whether_prediction_fits_zone(intensity, expected):
     assert explain.describe_intensity(74.4, intensity, None).endswith(expected)
+
+
+def test_describe_intensity_judges_by_displayed_value():
+    # 70.4%는 70%로 표시되므로 60~70% 구간 안으로 말해야 한다
+    assert explain.describe_intensity(70.4, "EASY", None) == (
+        "예상 운동 강도는 최대 심박의 70%로 '가볍게' 구간(60~70%)에 들어요.")
 
 
 def test_reason_with_records_adds_estimated_time():
