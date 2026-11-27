@@ -145,6 +145,19 @@ def test_order_is_fixed_for_records_that_differ_in_a_single_field(field, values)
     assert np.array_equal(y_first, y_second)
 
 
+def test_missing_value_and_placeholder_like_value_are_ordered_apart():
+    # 케이던스가 없는 기록과 -1 로 잘못 들어온 기록은 정렬에서 같은 자리로 취급되면 안 된다.
+    # 둘 다 "직전 기록"에는 들어가므로, 순서가 입력에 따라 바뀌면 다음 기록의 평소 케이던스가 달라진다
+    same_time = [record(days=0, cadence=None), record(days=0, cadence=-1)]
+    later = [record(days=day, cadence=165) for day in range(1, 5)] + [record(days=5)]
+    cadence = features.FEATURE_NAMES.index("recent_cadence")
+
+    X_first, _ = retrain.build_dataset(same_time + later)
+    X_second, _ = retrain.build_dataset(list(reversed(same_time)) + later)
+
+    assert X_first[-1][cadence] == pytest.approx(X_second[-1][cadence])
+
+
 def test_start_times_with_and_without_offset_can_be_mixed():
     # 07:00+09:00 과 시간대 없는 07:00 은 같은 한국 시각이다. 섞여 있어도 정렬에서 오류가 나지 않는다
     with_offset = TrainingRecord(

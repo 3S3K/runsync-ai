@@ -72,13 +72,14 @@ def _record_order(record: TrainingRecord) -> tuple:
     피처나 정답에 쓰이는 값을 하나라도 빼면, 그 값만 다른 기록들의 순서가 입력 순서를 따르게 된다.
     그래서 기록의 모든 필드를 넣는다. 모든 값이 같은 기록은 순서가 바뀌어도 결과가 같다.
     """
-    def known(value, missing):
-        return missing if value is None else value
+    def slot(value, placeholder):
+        # 값이 없는 것과 실제 값을 따로 구분한다. 자리 채움 값만 쓰면 그 값과 같은 실제 입력과 겹친다
+        return (value is None, placeholder if value is None else value)
 
     return (
         record.start_time, record.distance_km, record.duration_sec,
-        known(record.avg_heart_rate, -1), known(record.cadence, -1),
-        known(record.age, -1), known(record.gender, ""), known(record.elevation_gain_m, float("-inf")),
+        slot(record.avg_heart_rate, 0), slot(record.cadence, 0),
+        slot(record.age, 0), slot(record.gender, ""), slot(record.elevation_gain_m, 0.0),
     )
 
 
