@@ -56,7 +56,7 @@ class ElevationPoint(CamelModel):
 
 
 class SlopeSegment(CamelModel):
-    grade: str                      # FLAT(3% 미만) | MODERATE(3~6%) | STEEP(6% 이상)
+    grade: str                      # FLAT(5% 미만) | MODERATE(5~10%) | STEEP(10% 이상)
     coordinates: List[List[float]]  # [lng, lat]
 
 
