@@ -1,7 +1,7 @@
 """추천 이유 문장. LLM 없이 계산된 값을 템플릿에 채운다."""
 from typing import List, Optional
 
-from app import config
+from app import config, scorer
 from app.routing import Candidate
 from app.schemas import RecentRecord
 
@@ -24,12 +24,8 @@ def format_pace(sec_per_km: float) -> str:
 def describe_intensity(predicted_hr_pct: float, intensity: str, age: Optional[int]) -> str:
     """예상 운동 강도가 요청한 강도 구간에 드는지 말한다. 나이를 알면 심박수(bpm)도 덧붙인다."""
     low, high = config.INTENSITY_ZONE_PCT[intensity]
-    if predicted_hr_pct < low:
-        fit = "보다 낮아요"
-    elif predicted_hr_pct > high:
-        fit = "보다 높아요"
-    else:
-        fit = "에 들어요"
+    # 순위를 정할 때와 같은 기준(표시되는 정수 값)으로 판정한다
+    fit = {-1: "보다 낮아요", 0: "에 들어요", 1: "보다 높아요"}[scorer.zone_position(predicted_hr_pct, intensity)]
     bpm = f"(약 {round(predicted_hr_pct / 100 * (220 - age))}bpm)" if age is not None else ""
     return (f"예상 운동 강도는 최대 심박의 {predicted_hr_pct:.0f}%{bpm}로 "
             f"'{INTENSITY_LABEL[intensity]}' 구간({low:.0f}~{high:.0f}%){fit}.")

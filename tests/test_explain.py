@@ -42,6 +42,12 @@ def test_describe_intensity_says_whether_prediction_fits_zone(intensity, expecte
     assert explain.describe_intensity(74.4, intensity, None).endswith(expected)
 
 
+def test_describe_intensity_judges_by_displayed_value():
+    # 70.4%는 70%로 표시되므로 60~70% 구간 안으로 말해야 한다
+    assert explain.describe_intensity(70.4, "EASY", None) == (
+        "예상 운동 강도는 최대 심박의 70%로 '가볍게' 구간(60~70%)에 들어요.")
+
+
 def test_reason_with_records_adds_estimated_time():
     records = [RecentRecord(distance_km=5, duration_sec=1800)]  # 6'00"/km → 5.12km에 약 31분
     reason = explain.build_reason(COURSE, 5.0, "EASY", records)

@@ -35,6 +35,24 @@ def test_score_adds_weighted_intensity_error():
     assert scorer.score(c, 5000, "NORMAL") == pytest.approx(config.W_INTENSITY * 3)
 
 
+@pytest.mark.parametrize("predicted,expected", [
+    (59.4, -1),   # 59%로 표시 → 구간보다 낮음
+    (59.6, 0),    # 60%로 표시 → 구간 안
+    (70.4, 0),    # 70%로 표시 → 구간 안
+    (70.6, 1),    # 71%로 표시 → 구간보다 높음
+])
+def test_zone_position_uses_displayed_integer(predicted, expected):
+    assert scorer.zone_position(predicted, "EASY") == expected
+
+
+def test_in_zone_course_ranks_before_out_of_zone_course_with_better_distance():
+    in_zone = candidate(4500, edges=(1, 2), hr_pct=70.0)       # 거리 10% 부족, 구간 안
+    out_of_zone = candidate(5000, edges=(3, 4), hr_pct=70.6)   # 거리 정확, 71%로 표시돼 구간 밖
+    # 점수만 보면 구간 밖 코스가 더 좋다
+    assert scorer.score(out_of_zone, 5000, "EASY") < scorer.score(in_zone, 5000, "EASY")
+    assert scorer.select_top([out_of_zone, in_zone], 5000, "EASY") == [in_zone, out_of_zone]
+
+
 def test_easy_prefers_lower_predicted_intensity_and_hard_prefers_higher():
     gentle = candidate(5000, edges=(1, 2), hr_pct=68)
     tough = candidate(5000, edges=(3, 4), hr_pct=82)
