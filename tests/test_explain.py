@@ -52,3 +52,25 @@ def test_reason_with_records_adds_estimated_time():
     records = [RecentRecord(distance_km=5, duration_sec=1800)]  # 6'00"/km → 5.12km에 약 31분
     reason = explain.build_reason(COURSE, 5.0, "EASY", records)
     assert reason.endswith("최근 1회 평균 페이스(6'00\"/km)로 달리면 약 31분 걸려요.")
+
+
+def test_estimated_time_uses_recent_average_pace():
+    records = [RecentRecord(distance_km=5, duration_sec=1800)]   # 6'00"/km
+    assert explain.estimated_time_min(5120, records) == 31
+    assert explain.estimated_time_min(5120, []) is None
+
+
+def test_hr_bpm_range_spans_model_error_margin():
+    # 24세 → 최대 심박 196. 75% ± 2.5%p → 72.5%~77.5% → 142~152bpm
+    assert explain.hr_bpm_range(75.0, 24) == [142, 152]
+    assert explain.hr_bpm_range(75.0, None) is None
+
+
+def test_reason_mentions_biggest_climb_when_big_enough():
+    reason = explain.build_reason(COURSE, 5.0, "NORMAL", [], climb=(2810.0, 452.0, 11.3))
+    assert "가장 큰 오르막은 2.8km 지점부터 450m 동안 11m 올라가요." in reason
+
+
+def test_reason_skips_small_climb():
+    reason = explain.build_reason(COURSE, 5.0, "NORMAL", [], climb=(100.0, 60.0, 2.0))
+    assert "가장 큰 오르막" not in reason

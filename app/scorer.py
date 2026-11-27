@@ -35,6 +35,33 @@ def score(candidate: Candidate, target_m: float, intensity: str) -> float:
             + config.W_INTENSITY * intensity_error(candidate, intensity))
 
 
+def ranking_score(candidate: Candidate, target_m: float, intensity: str) -> float:
+    """순위를 정하는 값. 요청한 강도 구간을 벗어난 코스는 벌점을 받아 항상 뒤로 간다."""
+    in_zone = zone_position(candidate.predicted_hr_pct, intensity) == 0
+    penalty = 0.0 if in_zone else config.OUT_OF_ZONE_PENALTY
+    return score(candidate, target_m, intensity) + penalty
+
+
+def display_score(candidate: Candidate, target_m: float, intensity: str) -> int:
+    """화면에 보여 주는 추천 점수(0~100). 순위를 정하는 값과 같은 순서가 되도록 그 값에서 만든다."""
+    ratio = ranking_score(candidate, target_m, intensity) / config.SCORE_SCALE
+    return round(100 * max(0.0, 1 - ratio))
+
+
+def hr_zone(predicted_hr_pct: float) -> str:
+    """최대 심박 대비 %를 5구간 심박존으로. 화면에 보이는 정수 값으로 판정한다."""
+    shown = round(predicted_hr_pct)
+    if shown < 60:
+        return "Z1"
+    if shown < 70:
+        return "Z2"
+    if shown < 80:
+        return "Z3"
+    if shown < 90:
+        return "Z4"
+    return "Z5"
+
+
 def similarity(a: Candidate, b: Candidate) -> float:
     """두 코스가 공유하는 구간의 비율 (짧은 쪽 기준)."""
     edges_a, edges_b = set(a.edge_ids), set(b.edge_ids)
@@ -45,12 +72,8 @@ def select_top(candidates: List[Candidate], target_m: float, intensity: str) -> 
     usable = [c for c in candidates if distance_error(c, target_m) <= config.MAX_DISTANCE_ERROR]
     selected: List[Candidate] = []
     # 요청한 강도 구간에 드는 코스를 먼저, 그 안에서는 점수가 낮은 순으로 고른다.
-    # 가중치만으로는 구간 밖 코스가 거리 오차가 작다는 이유로 앞설 수 있다.
-    def sort_key(candidate: Candidate):
-        in_zone = zone_position(candidate.predicted_hr_pct, intensity) == 0
-        return (not in_zone, score(candidate, target_m, intensity))
-
-    for candidate in sorted(usable, key=sort_key):
+    # 가중치만으로는 구간 밖 코스가 거리 오차가 작다는 이유로 앞설 수 있어 벌점으로 나눈다.
+    for candidate in sorted(usable, key=lambda c: ranking_score(c, target_m, intensity)):
         if all(similarity(candidate, chosen) <= config.MAX_SIMILARITY for chosen in selected):
             selected.append(candidate)
         if len(selected) == config.TOP_N:

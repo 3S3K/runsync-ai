@@ -43,9 +43,29 @@ INTENSITY_ZONE_PCT = {"EASY": (60.0, 70.0), "NORMAL": (70.0, 80.0), "HARD": (80.
 W_DISTANCE = 1.0
 W_OVERLAP = 0.5
 W_INTENSITY = 0.1
+# 요청한 강도 구간을 벗어난 코스에 더하는 값. 구간 안 코스가 낼 수 있는 가장 나쁜 점수
+# (거리 0.3 + 중복 0.5 + 강도 0.5)보다 커서, 구간 안 코스가 항상 앞에 온다.
+OUT_OF_ZONE_PENALTY = 1.5
+# 화면에 보여 주는 추천 점수(100점 만점)로 바꿀 때의 기준. 이 값이면 0점
+SCORE_SCALE = 3.0
 # 이미 고른 코스와 겹치는 구간 비율이 이보다 크면 같은 코스로 보고 건너뛴다
 MAX_SIMILARITY = 0.7
 TOP_N = 3
 
 # 고도 프로필로 내려주는 점의 최대 개수
 ELEVATION_PROFILE_MAX_POINTS = 100
+
+# 화면에 보여 주는 최대 경사는 이 거리 이상의 구간에서 잰다.
+# 30m 표본 사이의 경사를 그대로 쓰면 고도 데이터 오차 때문에 20%가 넘는 값이 나온다.
+MAX_SLOPE_WINDOW_M = 100.0
+# 오르막 구간을 찾을 때, 이만큼까지 내려갔다 다시 오르는 것은 같은 오르막으로 본다
+CLIMB_DIP_TOLERANCE_M = 2.0
+# 추천 이유에 언급할 만한 오르막의 최소 높이 (가장 많이 오르는 구간 기준)
+MIN_CLIMB_GAIN_M = 5.0
+
+# 지도에 칠하는 경사 등급의 경계 (구간의 평균 기울기 %)
+SLOPE_GRADE_MODERATE_PCT = 3.0
+SLOPE_GRADE_STEEP_PCT = 6.0
+
+# 예상 심박수 범위의 폭. 모델의 검증 오차(MAE 약 2.5%p)만큼 위아래로 둔다
+HR_RANGE_MARGIN_PCT = 2.5

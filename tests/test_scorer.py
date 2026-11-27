@@ -94,3 +94,29 @@ def test_select_top_excludes_course_far_from_target_distance():
 
 def test_select_top_with_no_candidates():
     assert scorer.select_top([], 5000, "EASY") == []
+
+
+def test_ranking_score_adds_penalty_only_outside_zone():
+    inside = candidate(5000, hr_pct=68)
+    outside = candidate(5000, hr_pct=75)
+    assert scorer.ranking_score(inside, 5000, "EASY") == pytest.approx(scorer.score(inside, 5000, "EASY"))
+    assert scorer.ranking_score(outside, 5000, "EASY") == pytest.approx(
+        scorer.score(outside, 5000, "EASY") + config.OUT_OF_ZONE_PENALTY)
+
+
+def test_display_score_follows_ranking_order():
+    best = candidate(5000, edges=(1, 2), hr_pct=65)        # 구간 중앙, 거리 정확
+    good = candidate(5600, edges=(3, 4), hr_pct=69)        # 구간 안, 거리 12% 초과
+    outside = candidate(5000, edges=(5, 6), hr_pct=75)     # 거리는 정확하지만 구간 밖
+    scores = [scorer.display_score(c, 5000, "EASY") for c in (best, good, outside)]
+    assert scores[0] == 100
+    assert scores == sorted(scores, reverse=True)
+    assert all(0 <= value <= 100 for value in scores)
+    assert scorer.select_top([outside, good, best], 5000, "EASY") == [best, good, outside]
+
+
+@pytest.mark.parametrize("predicted,expected", [
+    (55, "Z1"), (59.6, "Z2"), (69.4, "Z2"), (69.6, "Z3"), (79.4, "Z3"), (80, "Z4"), (90, "Z5"),
+])
+def test_hr_zone(predicted, expected):
+    assert scorer.hr_zone(predicted) == expected

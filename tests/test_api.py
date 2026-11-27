@@ -1,4 +1,6 @@
 """API 테스트. 코스 생성 테스트는 전처리가 끝난 로컬 DB가 있어야 하고, 없으면 건너뛴다."""
+import re
+
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
@@ -120,8 +122,29 @@ def test_recommend_returns_distinct_loop_courses(client, target_km):
     assert f"최대 심박의 {best['predictedHrPct']:.0f}%" in best["reason"]
     assert "평균 페이스" in best["reason"]
 
+    # 순위가 높을수록 추천 점수가 높거나 같다
+    scores = [course["score"] for course in courses]
+    assert scores == sorted(scores, reverse=True)
+    assert len({course["name"] for course in courses}) == len(courses)
+
     for course in courses:
         assert abs(course["distanceKm"] - target_km) / target_km <= config.MAX_DISTANCE_ERROR
+        assert re.search(r"순환( \d+)?$", course["name"])   # "용운로 순환", "용운로 동쪽 순환 2"
+        assert 0 <= course["score"] <= 100
+        assert course["estimatedTimeMin"] > 0                      # 최근 기록을 보냈으므로 값이 있다
+        assert course["stairsCount"] >= 0
+        assert course["hrZone"] in ("Z1", "Z2", "Z3", "Z4", "Z5")
+        low_bpm, high_bpm = course["hrBpmRange"]                   # 나이를 보냈으므로 값이 있다
+        assert 80 < low_bpm < high_bpm < 220
+        assert 0 <= course["maxSlopePct"] < 30
+
+        # 경사 등급 구간을 이으면 전체 경로와 같은 출발·도착점을 가진다
+        segments = course["slopeSegments"]
+        assert all(segment["grade"] in ("FLAT", "MODERATE", "STEEP") for segment in segments)
+        assert segments[0]["coordinates"][0] == course["geometry"]["coordinates"][0]
+        assert segments[-1]["coordinates"][-1] == course["geometry"]["coordinates"][-1]
+        for previous, following in zip(segments, segments[1:]):
+            assert previous["coordinates"][-1] == following["coordinates"][0]
 
         profile = course["elevationProfile"]
         distances = [point["distanceM"] for point in profile]

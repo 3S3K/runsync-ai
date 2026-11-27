@@ -55,8 +55,21 @@ class ElevationPoint(CamelModel):
     elevation_m: float    # 해발 고도
 
 
+class SlopeSegment(CamelModel):
+    grade: str                      # FLAT(3% 미만) | MODERATE(3~6%) | STEEP(6% 이상)
+    coordinates: List[List[float]]  # [lng, lat]
+
+
+class Climb(CamelModel):
+    start_m: int    # 출발점부터 오르막이 시작하는 지점까지의 거리
+    length_m: int   # 오르막의 길이
+    gain_m: int     # 오르는 높이
+
+
 class CourseRes(CamelModel):
     rank: int
+    name: str                       # 예: "용운로 순환"
+    score: int                      # 추천 점수 (0~100)
     distance_km: float
     elevation_gain_m: float
     max_slope_pct: float
@@ -65,6 +78,12 @@ class CourseRes(CamelModel):
     reason: str
     geometry: Geometry
     elevation_profile: List[ElevationPoint]
+    estimated_time_min: Optional[int] = None    # 최근 기록의 평균 페이스 기준. 기록이 없으면 null
+    stairs_count: int                           # 계단 구간 수
+    hr_zone: str                                # 예상 심박존 (Z1~Z5)
+    hr_bpm_range: Optional[List[int]] = None    # 예상 심박수 [최저, 최고]. 나이를 모르면 null
+    biggest_climb: Optional[Climb] = None       # 가장 많이 오르는 구간(높이 기준). 오르막이 거의 없으면 null
+    slope_segments: List[SlopeSegment]          # 경사 등급별로 나눈 경로 (지도에 색을 칠할 때 쓴다)
 
 
 class RecommendRes(CamelModel):
