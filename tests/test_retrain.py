@@ -10,6 +10,8 @@ from app.main import app
 from app.schemas import TrainingRecord
 
 FIRST_RUN = datetime(2026, 11, 1, 7, 0)
+INTERNAL_KEY = "test-internal-key"
+AUTH = {"X-Internal-Api-Key": INTERNAL_KEY}
 
 
 def record(user_id=1, days=0, distance_km=5.0, duration_sec=1900, hr=152, cadence=165,
@@ -27,6 +29,7 @@ def retrain_settings(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "MODEL_KIND", "ridge")
     monkeypatch.setattr(config, "SYNTHETIC_ROWS", 1500)
     monkeypatch.setattr(config, "TRAINING_LOG_PATH", str(tmp_path / "trainings.jsonl"))
+    monkeypatch.setattr(config, "INTERNAL_API_KEY", INTERNAL_KEY)
 
 
 @pytest.fixture
@@ -99,6 +102,51 @@ def test_dataset_does_not_depend_on_input_order():
 
     assert np.array_equal(X_sorted, X_shuffled, equal_nan=True)
     assert np.array_equal(y_sorted, y_shuffled)
+
+
+def test_dataset_does_not_depend_on_order_across_users():
+    # 사용자가 여럿일 때도 행 순서가 같아야 교차 검증의 묶음 구성이 실행마다 같다
+    records = [record(user_id=user_id, days=day, hr=150 + user_id + day)
+               for user_id in (3, 1, 2) for day in range(3)]
+    X_first, y_first = retrain.build_dataset(records)
+    X_second, y_second = retrain.build_dataset(list(reversed(records)))
+
+    assert np.array_equal(X_first, X_second, equal_nan=True)
+    assert np.array_equal(y_first, y_second)
+    assert list(y_first[:3]) == [features.hr_pct(151 + day, 25) for day in range(3)]   # 사용자 1부터
+
+
+def test_records_with_the_same_start_time_are_not_each_others_history():
+    earlier = record(days=0, distance_km=4.0, duration_sec=1600)
+    same_time = [record(days=1, distance_km=5.0, duration_sec=1900), record(days=1, distance_km=8.0, duration_sec=3200)]
+    pace = features.FEATURE_NAMES.index("recent_pace_sec_per_km")
+
+    for ordered in (same_time, list(reversed(same_time))):
+        X, _ = retrain.build_dataset([earlier] + ordered)
+        # 같은 시각의 두 기록은 모두 그 전 기록(400초/km)만 평소 값으로 본다
+        assert X[1][pace] == pytest.approx(400) and X[2][pace] == pytest.approx(400)
+
+
+def test_start_times_with_and_without_offset_can_be_mixed():
+    # 07:00+09:00 과 시간대 없는 07:00 은 같은 한국 시각이다. 섞여 있어도 정렬에서 오류가 나지 않는다
+    with_offset = TrainingRecord(
+        user_id=1, age=25, gender="MALE", start_time="2026-11-02T07:00:00+09:00",
+        distance_km=5.0, duration_sec=1900, avg_heart_rate=152)
+    utc = TrainingRecord(
+        user_id=1, age=25, gender="MALE", start_time="2026-11-02T22:00:00Z",
+        distance_km=5.0, duration_sec=1900, avg_heart_rate=152)
+
+    assert with_offset.start_time == datetime(2026, 11, 2, 7, 0)
+    assert utc.start_time == datetime(2026, 11, 3, 7, 0)
+    _, y = retrain.build_dataset([record(days=0), with_offset, utc])
+    assert len(y) == 3
+
+
+def test_negative_elevation_gain_is_treated_as_unknown():
+    X, y = retrain.build_dataset([record(elevation_gain_m=-5.0)])
+
+    assert len(y) == 1
+    assert np.isnan(X[0][features.FEATURE_NAMES.index("climb_m_per_km")])
 
 
 def test_only_the_last_five_earlier_records_count():
@@ -176,6 +224,36 @@ def test_model_is_kept_when_validation_error_gets_worse(monkeypatch, isolated_mo
     assert not os.path.exists(isolated_model + ".prev")
 
 
+def test_model_is_kept_when_validation_error_is_the_same(monkeypatch, isolated_model):
+    monkeypatch.setattr(retrain, "baseline_mae", lambda *_: 3.0)
+    monkeypatch.setattr(retrain, "cross_validated_mae", lambda *_: 3.0)
+
+    result = retrain.run(many_records())
+
+    assert result["replaced"] is False
+    assert result["reason"] == retrain.REASON_NOT_IMPROVED
+
+
+def test_failed_run_is_recorded_and_keeps_the_model(monkeypatch, isolated_model):
+    def fail(*_):
+        raise RuntimeError("학습 실패")
+    monkeypatch.setattr(retrain, "baseline_mae", fail)
+
+    with pytest.raises(RuntimeError):
+        retrain.run(many_records())
+
+    assert retrain.history()[0]["reason"] == retrain.REASON_FAILED
+    assert not os.path.exists(isolated_model + ".prev")
+
+
+def test_unreadable_history_line_is_skipped(isolated_model):
+    retrain.run([record()])
+    with open(config.TRAINING_LOG_PATH, "a", encoding="utf-8") as file:
+        file.write("{끊긴 줄\n")
+
+    assert len(retrain.history()) == 1
+
+
 def test_validation_runs_end_to_end(isolated_model):
     """실제 계산 경로(합성 데이터 생성, 가중치 학습, 교차 검증)가 끝까지 돈다."""
     result = retrain.run(many_records())
@@ -199,17 +277,47 @@ def test_history_is_empty_before_first_run():
 
 # ----- API -----
 
+# with 블록 없이 만들면 앱의 시작·종료 절차(DB 연결 풀 열기)가 돌지 않는다. 재학습 API는 DB를 쓰지 않고,
+# 연결 풀은 한 번 닫히면 다시 열 수 없어 다른 테스트 모듈과 충돌한다. 모델은 conftest 가 이미 불러 두었다
+client = TestClient(app)
+
+TRAINING_BODY = {"records": [{
+    "userId": 1, "age": 25, "gender": "MALE", "startTime": "2026-11-20T07:00:00",
+    "distanceKm": 5.0, "durationSec": 1900, "avgHeartRate": 152, "cadence": 165, "elevationGainM": 40,
+}]}
+
+
 def test_training_api_uses_camel_case(isolated_model):
-    body = {"records": [{
-        "userId": 1, "age": 25, "gender": "MALE", "startTime": "2026-11-20T07:00:00",
-        "distanceKm": 5.0, "durationSec": 1900, "avgHeartRate": 152, "cadence": 165, "elevationGainM": 40,
-    }]}
-    with TestClient(app) as client:
-        response = client.post("/model/trainings", json=body)
-        history = client.get("/model/trainings")
+    response = client.post("/model/trainings", json=TRAINING_BODY, headers=AUTH)
+    history = client.get("/model/trainings", headers=AUTH)
 
     assert response.status_code == 200
     result = response.json()
     assert result["receivedCount"] == 1 and result["usedCount"] == 1
     assert result["replaced"] is False
     assert history.json()["trainings"][0]["trainedAt"] == result["trainedAt"]
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-Internal-Api-Key": "wrong-key"}])
+def test_training_api_requires_the_internal_key(isolated_model, headers):
+    created = client.post("/model/trainings", json=TRAINING_BODY, headers=headers)
+    listed = client.get("/model/trainings", headers=headers)
+
+    assert created.status_code == 401 and listed.status_code == 401
+    assert created.json()["code"] == "INVALID_INTERNAL_KEY"
+    assert retrain.history() == []      # 거절된 요청은 학습을 시작하지 않는다
+
+
+def test_training_api_is_closed_when_the_server_has_no_key(monkeypatch, isolated_model):
+    monkeypatch.setattr(config, "INTERNAL_API_KEY", "")
+    response = client.post("/model/trainings", json=TRAINING_BODY, headers=AUTH)
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "TRAINING_DISABLED"
+
+
+def test_training_api_rejects_non_finite_numbers(isolated_model):
+    body = {"records": [dict(TRAINING_BODY["records"][0], distanceKm="NaN")]}
+    response = client.post("/model/trainings", json=body, headers=AUTH)
+
+    assert response.status_code == 422

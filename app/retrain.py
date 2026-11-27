@@ -14,7 +14,8 @@ import shutil
 import threading
 import warnings
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from itertools import groupby
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import joblib
@@ -22,11 +23,10 @@ import numpy as np
 from sklearn.model_selection import KFold
 
 from app import config, features, model, synthetic, train
-from app.schemas import RecentRecord, TrainingRecord, UserInfo
+from app.schemas import KST, RecentRecord, TrainingRecord, UserInfo
 
 logger = logging.getLogger(__name__)
 
-KST = timezone(timedelta(hours=9))
 # 재학습이 겹쳐 실행되지 않게 한다 (모델 파일과 이력 파일을 같이 쓴다)
 _lock = threading.Lock()
 
@@ -34,6 +34,7 @@ REASON_NO_RECORDS = "학습에 쓸 수 있는 기록이 없음"
 REASON_NOT_ENOUGH_FOR_VALIDATION = "교차 검증에는 기록이 2건 이상 필요함"
 REASON_IMPROVED = "실제 기록을 반영한 모델의 검증 오차가 더 작음"
 REASON_NOT_IMPROVED = "실제 기록을 반영해도 검증 오차가 줄지 않음"
+REASON_FAILED = "재학습 중 오류가 발생함"
 
 
 def is_usable(record: TrainingRecord) -> bool:
@@ -65,6 +66,22 @@ def _to_recent(record: TrainingRecord) -> RecentRecord:
     )
 
 
+def _record_order(record: TrainingRecord) -> tuple:
+    """시작 시각 순. 시각이 같으면 나머지 값으로 순서를 정해 입력 순서에 좌우되지 않게 한다."""
+    return (
+        record.start_time, record.distance_km, record.duration_sec,
+        -1 if record.avg_heart_rate is None else record.avg_heart_rate,
+        -1 if record.cadence is None else record.cadence,
+    )
+
+
+def _climb_m_per_km(record: TrainingRecord) -> float:
+    # 음수는 잘못 입력된 값이라 모르는 값으로 둔다
+    if record.elevation_gain_m is None or record.elevation_gain_m < 0:
+        return features.NAN
+    return record.elevation_gain_m / record.distance_km
+
+
 def build_dataset(records: Sequence[TrainingRecord]) -> Tuple[np.ndarray, np.ndarray]:
     """선별을 통과한 기록마다 (피처, 정답)을 만든다.
 
@@ -77,24 +94,24 @@ def build_dataset(records: Sequence[TrainingRecord]) -> Tuple[np.ndarray, np.nda
         by_user[record.user_id].append(record)
 
     rows, targets = [], []
-    for user_records in by_user.values():
-        user_records.sort(key=lambda record: record.start_time)
+    # 같은 기록 묶음이면 보낸 순서와 무관하게 같은 행 순서가 나오도록, 사용자와 기록의 순서를 고정한다.
+    # 행 순서가 바뀌면 교차 검증의 묶음 구성이 달라져 결과가 실행마다 달라진다
+    for user_id in sorted(by_user):
+        user_records = sorted(by_user[user_id], key=_record_order)
         history: List[TrainingRecord] = []      # 이 기록보다 먼저 달린, 평소 값 계산에 쓸 수 있는 기록
-        for record in user_records:
-            if is_usable(record):
-                recent = [_to_recent(r) for r in history[-config.RECENT_RECORD_COUNT:]]
-                user = UserInfo(user_id=record.user_id, age=record.age, gender=record.gender)
-                climb_m_per_km = (
-                    record.elevation_gain_m / record.distance_km
-                    if record.elevation_gain_m is not None else features.NAN
-                )
-                rows.append(features.build_row(
-                    features.user_features(user, recent),
-                    features.course_features(record.distance_km, climb_m_per_km, features.NAN),
-                ))
-                targets.append(features.hr_pct(record.avg_heart_rate, record.age))
-            if record.distance_km > 0 and record.duration_sec > 0:
-                history.append(record)
+        # 시작 시각이 같은 기록끼리는 서로의 "직전 기록"이 아니다. 같은 이전 기록으로 계산한 뒤 한꺼번에 더한다
+        for _, same_time in groupby(user_records, key=lambda record: record.start_time):
+            group = list(same_time)
+            recent = [_to_recent(r) for r in history[-config.RECENT_RECORD_COUNT:]]
+            for record in group:
+                if is_usable(record):
+                    user = UserInfo(user_id=record.user_id, age=record.age, gender=record.gender)
+                    rows.append(features.build_row(
+                        features.user_features(user, recent),
+                        features.course_features(record.distance_km, _climb_m_per_km(record), features.NAN),
+                    ))
+                    targets.append(features.hr_pct(record.avg_heart_rate, record.age))
+            history.extend(r for r in group if r.distance_km > 0 and r.duration_sec > 0)
 
     X = np.asarray(rows, dtype=float).reshape(-1, len(features.FEATURE_NAMES))
     return X, np.asarray(targets, dtype=float)
@@ -168,7 +185,14 @@ def history(limit: Optional[int] = None) -> List[dict]:
             lines = [line for line in file if line.strip()]
     except FileNotFoundError:
         return []
-    return [json.loads(line) for line in reversed(lines[-limit:])]
+    items = []
+    for line in reversed(lines[-limit:]):
+        try:
+            items.append(json.loads(line))
+        except json.JSONDecodeError:
+            # 쓰다가 끊긴 줄 하나 때문에 이력 전체를 못 보는 일이 없게 건너뛴다
+            logger.warning("읽을 수 없는 재학습 이력 줄을 건너뜁니다")
+    return items
 
 
 def _result(received: int, used: int, replaced: bool, reason: str,
@@ -195,7 +219,8 @@ def _run(records: Sequence[TrainingRecord]) -> dict:
     X_synthetic, y_synthetic = synthetic.generate(config.SYNTHETIC_ROWS, config.SYNTHETIC_SEED)
     baseline = baseline_mae(X_synthetic, y_synthetic, X_real, y_real)
     candidate = cross_validated_mae(X_synthetic, y_synthetic, X_real, y_real)
-    if candidate > baseline:
+    # 오차가 같으면 나아진 것이 아니므로 교체하지 않는다
+    if candidate >= baseline:
         return _result(len(records), used, False, REASON_NOT_IMPROVED, baseline, candidate)
 
     # 검증을 통과하면 모든 실제 기록을 넣어 다시 학습한 모델을 쓴다
@@ -206,7 +231,12 @@ def _run(records: Sequence[TrainingRecord]) -> dict:
 def run(records: Sequence[TrainingRecord]) -> dict:
     """재학습을 한 번 실행하고 결과를 이력에 남긴다."""
     with _lock:
-        result = _run(records)
+        try:
+            result = _run(records)
+        except Exception:
+            # 실패한 실행도 이력에 남긴다. 서비스 중인 모델은 그대로다
+            _append_history(_result(len(records), 0, False, REASON_FAILED))
+            raise
         _append_history(result)
     logger.info("재학습: %s", result)
     return result

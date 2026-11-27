@@ -1,12 +1,16 @@
 """요청·응답 모델. JSON은 백엔드와 맞춰 camelCase, 코드 안에서는 snake_case."""
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
 from app import config
+
+
+# 서비스의 시각은 모두 한국 시간의 벽시계 값으로 다룬다 (백엔드와 같다)
+KST = timezone(timedelta(hours=9))
 
 
 class CamelModel(BaseModel):
@@ -97,15 +101,26 @@ class TrainingRecord(CamelModel):
     age: Optional[int] = None
     gender: Optional[str] = None
     start_time: datetime
-    distance_km: float
+    distance_km: float = Field(allow_inf_nan=False)
     duration_sec: int
     avg_heart_rate: Optional[int] = None
     cadence: Optional[int] = None
-    elevation_gain_m: Optional[float] = None
+    elevation_gain_m: Optional[float] = Field(default=None, allow_inf_nan=False)
+
+    @field_validator("start_time")
+    @classmethod
+    def to_korea_wall_clock(cls, value: datetime) -> datetime:
+        """시간대가 붙은 값은 한국 시간으로 바꾸고, 없는 값은 한국 시간으로 본다.
+
+        시간대가 있는 값과 없는 값이 섞이면 서로 비교할 수 없어, 모두 시간대 없는 한국 시각으로 맞춘다.
+        """
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(KST).replace(tzinfo=None)
 
 
 class TrainingReq(CamelModel):
-    records: List[TrainingRecord] = Field(default_factory=list)
+    records: List[TrainingRecord] = Field(default_factory=list, max_length=config.TRAIN_MAX_RECORDS)
 
 
 class TrainingRes(CamelModel):

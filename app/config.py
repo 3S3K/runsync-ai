@@ -6,6 +6,8 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://runsync:1234@localho
 MODEL_PATH = os.environ.get("MODEL_PATH", "models/hr_model.joblib")
 # 모델 종류: lightgbm | ridge
 MODEL_KIND = os.environ.get("MODEL_KIND", "lightgbm")
+# 재학습 API를 호출할 수 있는 키. 백엔드와 같은 값을 둔다. 비어 있으면 재학습 API를 쓸 수 없다
+INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
 # 재학습 이력 파일 (한 줄에 한 건). 배포 서버에서는 logs 폴더가 컨테이너 밖에 보관된다
 TRAINING_LOG_PATH = os.environ.get("TRAINING_LOG_PATH", "logs/trainings.jsonl")
 
@@ -91,5 +93,7 @@ TRAIN_MIN_CADENCE, TRAIN_MAX_CADENCE = 120, 220
 TRAIN_MIN_AGE, TRAIN_MAX_AGE = 10, 90
 # 교차 검증 묶음 수의 상한 (기록이 이보다 적으면 기록 수만큼 나눈다)
 CV_MAX_FOLDS = 5
+# 한 번의 재학습 요청으로 받을 수 있는 기록 수
+TRAIN_MAX_RECORDS = 50000
 # 이력 조회 때 돌려주는 최근 건수
 TRAINING_HISTORY_LIMIT = 50
