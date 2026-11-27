@@ -58,13 +58,13 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
           envs: ENV_FILE
           script: |
             set -e
 
             umask 077
             printf '%s' "$ENV_FILE" > /home/ubuntu/.env
-
             chmod 600 /home/ubuntu/.env
 
       # 7. EC2에 Docker 컨테이너 배포
@@ -77,16 +77,24 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
           envs: DOCKER_USERNAME,IMAGE_TAG
           script: |
             set -e
 
-            IMAGE="$DOCKER_USERNAME/runsync-ai:$IMAGE_TAG"
+            REPO="$DOCKER_USERNAME/runsync-ai"
+            IMAGE="$REPO:$IMAGE_TAG"
+
+            # 기존 배포 이미지 ID 저장 (롤백용)
+            PREVIOUS_IMAGE_ID=$(sudo docker inspect \
+              --format '{{.Image}}' runsync-ai 2>/dev/null || true)
 
             # 최신 이미지 다운로드
+            echo "Pulling Docker image..."
             sudo docker pull "$IMAGE"
 
             # 기존 컨테이너 중지 및 삭제
+            echo "Stopping old container..."
             sudo docker stop runsync-ai || true
             sudo docker rm -f runsync-ai || true
 
@@ -94,6 +102,7 @@ jobs:
             mkdir -p /home/ubuntu/runsync-ai-logs
 
             # 새 컨테이너 실행
+            echo "Starting new container..."
             sudo docker run -d \
               --name runsync-ai \
               --restart unless-stopped \
@@ -102,8 +111,57 @@ jobs:
               -v /home/ubuntu/runsync-ai-logs:/app/logs \
               "$IMAGE"
 
-            # 사용하지 않는 이미지 정리
+            # 8. Health Check
+            echo "Checking FastAPI health..."
+
+            HEALTHY=false
+
+            for i in $(seq 1 12); do
+              if curl --fail --silent \
+                --max-time 3 \
+                http://127.0.0.1:8000/health > /dev/null; then
+
+                HEALTHY=true
+                echo "Health check passed!"
+                break
+              fi
+
+              echo "Health check failed ($i/12). Retrying..."
+              sleep 5
+            done
+
+            # Health Check 실패 시 배포 실패 처리
+            if [ "$HEALTHY" != "true" ]; then
+              echo "Deployment failed: FastAPI health check failed."
+              sudo docker logs --tail 100 runsync-ai
+              exit 1
+            fi
+
+            echo "Deployment successful!"
+
+            # 9. 이전 Docker 이미지 정리
+            CURRENT_IMAGE_ID=$(sudo docker inspect \
+              --format '{{.Image}}' runsync-ai)
+
+            echo "Cleaning up old Docker images..."
+
+            sudo docker images "$REPO" \
+              --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
+              | while read -r IMAGE_REF IMAGE_ID; do
+
+                  # 현재 이미지와 직전 배포 이미지는 보존
+                  if [ "$IMAGE_ID" = "$CURRENT_IMAGE_ID" ] || \
+                     [ "$IMAGE_ID" = "$PREVIOUS_IMAGE_ID" ]; then
+                    continue
+                  fi
+
+                  # 오래된 이미지 태그 삭제
+                  sudo docker image rm "$IMAGE_REF" || true
+                done
+
+            # Dangling 이미지 정리
             sudo docker image prune -f
 
-            # 실행 중인 컨테이너 확인
+            # 10. 실행 중인 컨테이너 확인
+            echo "Running containers:"
             sudo docker ps
