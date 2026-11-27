@@ -9,15 +9,16 @@ def distance_error(candidate: Candidate, target_m: float) -> float:
     return abs(candidate.distance_m - target_m) / target_m
 
 
-def climb_error(candidate: Candidate, intensity: str) -> float:
-    """1km당 오르막이 강도별 목표에서 벗어난 정도(m/km)."""
-    return abs(candidate.climb_m_per_km - config.TARGET_CLIMB_M_PER_KM[intensity])
+def intensity_error(candidate: Candidate, intensity: str) -> float:
+    """예상 운동 강도가 목표 구간의 중앙에서 벗어난 정도(%p)."""
+    low, high = config.INTENSITY_ZONE_PCT[intensity]
+    return abs(candidate.predicted_hr_pct - (low + high) / 2)
 
 
 def score(candidate: Candidate, target_m: float, intensity: str) -> float:
     return (config.W_DISTANCE * distance_error(candidate, target_m)
             + config.W_OVERLAP * candidate.overlap_ratio
-            + config.W_CLIMB * climb_error(candidate, intensity))
+            + config.W_INTENSITY * intensity_error(candidate, intensity))
 
 
 def similarity(a: Candidate, b: Candidate) -> float:

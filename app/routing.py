@@ -25,6 +25,7 @@ class Candidate:
     overlap_ratio: float  # 같은 구간을 두 번 이상 지나는 거리의 비율
     edge_ids: List[int]
     coordinates: List[List[float]]  # [lng, lat]
+    predicted_hr_pct: Optional[float] = None  # 심박 예측 모델이 채운다
 
     @property
     def climb_m_per_km(self) -> float:

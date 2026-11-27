@@ -75,14 +75,24 @@ def test_no_usable_course_returns_404(client):
     assert response.json()["code"] == "COURSE_NOT_FOUND"
 
 
-@needs_db
-def test_hard_recommends_more_climb_than_easy(client):
-    def average_climb(intensity):
-        body = {"start": DAEJEON_UNIV, "targetDistanceKm": 5, "intensity": intensity}
-        courses = client.post("/recommend", json=body).json()["courses"]
-        return sum(c["elevationGainM"] / c["distanceKm"] for c in courses) / len(courses)
+def _average_predicted(client, intensity, records):
+    body = {"start": DAEJEON_UNIV, "targetDistanceKm": 5, "intensity": intensity,
+            "user": {"userId": 1, "age": 24, "gender": "MALE"}, "recentRecords": records}
+    courses = client.post("/recommend", json=body).json()["courses"]
+    return sum(c["predictedHrPct"] for c in courses) / len(courses)
 
-    assert average_climb("HARD") > average_climb("EASY")
+
+@needs_db
+def test_hard_recommends_higher_predicted_intensity_than_easy(client):
+    records = [{"distanceKm": 5, "durationSec": 1800, "cadence": 168}]
+    assert _average_predicted(client, "HARD", records) > _average_predicted(client, "EASY", records)
+
+
+@needs_db
+def test_slower_runner_gets_higher_predicted_intensity_on_same_request(client):
+    fast = [{"distanceKm": 5, "durationSec": 1400, "cadence": 180}]   # 4'40"/km
+    slow = [{"distanceKm": 5, "durationSec": 2300, "cadence": 158}]   # 7'40"/km
+    assert _average_predicted(client, "EASY", slow) > _average_predicted(client, "EASY", fast) + 5
 
 
 @needs_db
@@ -100,7 +110,8 @@ def test_recommend_returns_distinct_loop_courses(client, target_km):
     assert len(courses) == config.TOP_N
     assert [c["rank"] for c in courses] == [1, 2, 3]
     best = courses[0]
-    assert best["predictedHrPct"] is None
+    assert 50 <= best["predictedHrPct"] <= 100
+    assert "예상 운동 강도" in best["reason"]
     assert "평균 페이스" in best["reason"]
 
     for course in courses:
