@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app import config, errors, explain, features, model, routing, scorer
+from app import config, elevation, errors, explain, features, model, routing, scorer
 from app.db import pool
-from app.schemas import CourseRes, ErrorRes, Geometry, RecommendReq, RecommendRes
+from app.schemas import CourseRes, ElevationPoint, ErrorRes, Geometry, RecommendReq, RecommendRes
 
 
 @asynccontextmanager
@@ -61,6 +61,10 @@ def create_recommendation(request: RecommendReq) -> RecommendRes:
     if not selected:
         raise errors.course_not_found()
 
+    # 고도 프로필은 추천으로 뽑힌 코스에만 계산한다 (후보 16개 전부에 계산하면 낭비다)
+    with pool.connection() as conn:
+        profiles = [elevation.elevation_profile(conn, candidate) for candidate in selected]
+
     courses = [
         CourseRes(
             rank=rank,
@@ -74,7 +78,11 @@ def create_recommendation(request: RecommendReq) -> RecommendRes:
                 candidate, request.target_distance_km, request.intensity.value, request.recent_records,
                 age=request.user.age if request.user else None),
             geometry=Geometry(coordinates=candidate.coordinates),
+            elevation_profile=[
+                ElevationPoint(distance_m=round(distance_m), elevation_m=round(elevation_m, 1))
+                for distance_m, elevation_m in profile
+            ],
         )
-        for rank, candidate in enumerate(selected, start=1)
+        for rank, (candidate, profile) in enumerate(zip(selected, profiles), start=1)
     ]
     return RecommendRes(courses=courses)

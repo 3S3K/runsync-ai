@@ -46,3 +46,6 @@ W_INTENSITY = 0.1
 # 이미 고른 코스와 겹치는 구간 비율이 이보다 크면 같은 코스로 보고 건너뛴다
 MAX_SIMILARITY = 0.7
 TOP_N = 3
+
+# 고도 프로필로 내려주는 점의 최대 개수
+ELEVATION_PROFILE_MAX_POINTS = 100

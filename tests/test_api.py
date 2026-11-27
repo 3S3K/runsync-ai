@@ -122,6 +122,16 @@ def test_recommend_returns_distinct_loop_courses(client, target_km):
 
     for course in courses:
         assert abs(course["distanceKm"] - target_km) / target_km <= config.MAX_DISTANCE_ERROR
+
+        profile = course["elevationProfile"]
+        distances = [point["distanceM"] for point in profile]
+        assert 2 <= len(profile) <= config.ELEVATION_PROFILE_MAX_POINTS
+        assert distances[0] == 0
+        assert distances == sorted(distances)
+        # 프로필의 끝 거리는 코스 총 거리와 같아야 한다 (반올림 오차 허용)
+        assert distances[-1] == pytest.approx(course["distanceKm"] * 1000, rel=0.02)
+        # 순환 코스라 출발점과 도착점의 고도가 같다
+        assert profile[0]["elevationM"] == pytest.approx(profile[-1]["elevationM"], abs=0.5)
         coordinates = course["geometry"]["coordinates"]
         assert course["geometry"]["type"] == "LineString"
         # 순환 코스: 출발점으로 돌아온다
