@@ -64,8 +64,9 @@ CLIMB_DIP_TOLERANCE_M = 2.0
 MIN_CLIMB_GAIN_M = 5.0
 
 # 지도에 칠하는 경사 등급의 경계 (구간의 평균 기울기 %)
-SLOPE_GRADE_MODERATE_PCT = 3.0
-SLOPE_GRADE_STEEP_PCT = 6.0
+# 러닝 코칭에서 언덕 훈련에 권장하는 경사 범위(5~10%)를 가운데 등급으로 삼는다
+SLOPE_GRADE_MODERATE_PCT = 5.0
+SLOPE_GRADE_STEEP_PCT = 10.0
 
 # 예상 심박수 범위의 폭. 모델의 검증 오차(MAE 약 2.5%p)만큼 위아래로 둔다
 HR_RANGE_MARGIN_PCT = 2.5

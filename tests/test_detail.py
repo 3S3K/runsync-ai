@@ -11,9 +11,10 @@ def row(length_m, name, is_steps, up_and_down_m, coordinates):
 
 @pytest.mark.parametrize("up_and_down_m,expected", [
     (2.0, detail.FLAT),       # 100m에 2m → 2%
-    (3.0, detail.MODERATE),   # 3%
-    (5.9, detail.MODERATE),
-    (6.0, detail.STEEP),      # 6%
+    (4.9, detail.FLAT),
+    (5.0, detail.MODERATE),   # 5%
+    (9.9, detail.MODERATE),
+    (10.0, detail.STEEP),     # 10%
 ])
 def test_slope_grade_boundaries(up_and_down_m, expected):
     assert detail.slope_grade(100, up_and_down_m) == expected
@@ -49,7 +50,7 @@ def test_slope_segments_merge_same_grade_and_stay_connected():
     info = detail.build_detail([
         row(100, None, False, 1, [[0, 0], [1, 0]]),          # 완만
         row(100, None, False, 2, [[1, 0], [2, 0]]),          # 완만 → 앞과 합친다
-        row(100, None, False, 8, [[2, 0], [3, 0], [4, 0]]),  # 급경사
+        row(100, None, False, 12, [[2, 0], [3, 0], [4, 0]]), # 급경사
     ])
     assert [segment.grade for segment in info.slope_segments] == [detail.FLAT, detail.STEEP]
     assert info.slope_segments[0].coordinates == [[0, 0], [1, 0], [2, 0]]
