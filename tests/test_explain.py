@@ -24,7 +24,7 @@ def test_average_pace_without_records():
 
 def test_reason_without_records_or_age():
     reason = explain.build_reason(COURSE, 5.0, "NORMAL", [])
-    assert reason == ("목표 5km 기준 5.1km 순환 코스예요. 누적 오르막 38m, 최대 경사 6.4%예요. "
+    assert reason == ("목표 5km 기준 5.1km 순환 코스예요. 누적 오르막은 38m예요. "
                       "예상 운동 강도는 최대 심박의 74%로 '보통' 구간(70~80%)에 들어요.")
 
 

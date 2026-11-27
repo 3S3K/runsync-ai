@@ -42,7 +42,7 @@ INTENSITY_ZONE_PCT = {"EASY": (60.0, 70.0), "NORMAL": (70.0, 80.0), "HARD": (80.
 #   + W_INTENSITY × |예상 강도 − 목표 구간의 중앙| (%p)
 W_DISTANCE = 1.0
 W_OVERLAP = 0.5
-W_INTENSITY = 0.05
+W_INTENSITY = 0.1
 # 이미 고른 코스와 겹치는 구간 비율이 이보다 크면 같은 코스로 보고 건너뛴다
 MAX_SIMILARITY = 0.7
 TOP_N = 3

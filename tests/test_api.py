@@ -112,6 +112,9 @@ def test_recommend_returns_distinct_loop_courses(client, target_km):
     best = courses[0]
     assert 50 <= best["predictedHrPct"] <= 100
     assert "예상 운동 강도" in best["reason"]
+    # 카드에 보이는 숫자와 문장 속 숫자가 같아야 한다
+    assert f"누적 오르막은 {best['elevationGainM']:.0f}m" in best["reason"]
+    assert f"최대 심박의 {best['predictedHrPct']:.0f}%" in best["reason"]
     assert "평균 페이스" in best["reason"]
 
     for course in courses:

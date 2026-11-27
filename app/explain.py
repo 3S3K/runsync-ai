@@ -40,7 +40,7 @@ def build_reason(candidate: Candidate, target_km: float, intensity: str,
     distance_km = candidate.distance_m / 1000
     reason = (
         f"목표 {target_km:g}km 기준 {distance_km:.1f}km 순환 코스예요. "
-        f"누적 오르막 {candidate.ascent_m:.0f}m, 최대 경사 {candidate.max_slope_pct:.1f}%예요. "
+        f"누적 오르막은 {candidate.ascent_m:.0f}m예요. "
         + describe_intensity(candidate.predicted_hr_pct, intensity, age)
     )
     pace = average_pace_sec_per_km(records)
