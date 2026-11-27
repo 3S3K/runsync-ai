@@ -67,11 +67,18 @@ def _to_recent(record: TrainingRecord) -> RecentRecord:
 
 
 def _record_order(record: TrainingRecord) -> tuple:
-    """시작 시각 순. 시각이 같으면 나머지 값으로 순서를 정해 입력 순서에 좌우되지 않게 한다."""
+    """시작 시각 순. 시각이 같으면 나머지 모든 값으로 순서를 정해 입력 순서에 좌우되지 않게 한다.
+
+    피처나 정답에 쓰이는 값을 하나라도 빼면, 그 값만 다른 기록들의 순서가 입력 순서를 따르게 된다.
+    그래서 기록의 모든 필드를 넣는다. 모든 값이 같은 기록은 순서가 바뀌어도 결과가 같다.
+    """
+    def known(value, missing):
+        return missing if value is None else value
+
     return (
         record.start_time, record.distance_km, record.duration_sec,
-        -1 if record.avg_heart_rate is None else record.avg_heart_rate,
-        -1 if record.cadence is None else record.cadence,
+        known(record.avg_heart_rate, -1), known(record.cadence, -1),
+        known(record.age, -1), known(record.gender, ""), known(record.elevation_gain_m, float("-inf")),
     )
 
 

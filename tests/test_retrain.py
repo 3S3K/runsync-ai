@@ -127,6 +127,24 @@ def test_records_with_the_same_start_time_are_not_each_others_history():
         assert X[1][pace] == pytest.approx(400) and X[2][pace] == pytest.approx(400)
 
 
+@pytest.mark.parametrize("field,values", [
+    ("age", (25, 35)),
+    ("gender", ("MALE", "FEMALE")),
+    ("elevation_gain_m", (20.0, 60.0)),
+    ("elevation_gain_m", (None, 60.0)),
+    ("cadence", (None, 165)),
+])
+def test_order_is_fixed_for_records_that_differ_in_a_single_field(field, values):
+    # 시작 시각과 거리·시간·심박이 같고 한 값만 다른 기록도, 보낸 순서와 무관하게 같은 행 순서가 된다
+    records = [record(days=0, **{field: value}) for value in values]
+    X_first, y_first = retrain.build_dataset(records)
+    X_second, y_second = retrain.build_dataset(list(reversed(records)))
+
+    assert len(y_first) == 2
+    assert np.array_equal(X_first, X_second, equal_nan=True)
+    assert np.array_equal(y_first, y_second)
+
+
 def test_start_times_with_and_without_offset_can_be_mixed():
     # 07:00+09:00 과 시간대 없는 07:00 은 같은 한국 시각이다. 섞여 있어도 정렬에서 오류가 나지 않는다
     with_offset = TrainingRecord(
