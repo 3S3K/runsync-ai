@@ -49,9 +49,9 @@ def hr_bpm_range(predicted_hr_pct: float, age: Optional[int]) -> Optional[List[i
 
 
 def describe_climb(climb) -> str:
-    """가장 긴 오르막을 설명한다. climb은 (시작 거리 m, 길이 m, 오르는 높이 m)."""
+    """가장 많이 오르는 구간을 설명한다. climb은 (시작 거리 m, 길이 m, 오르는 높이 m)."""
     start_m, length_m, gain_m = climb
-    return (f" 가장 긴 오르막은 {start_m / 1000:.1f}km 지점부터 "
+    return (f" 가장 큰 오르막은 {start_m / 1000:.1f}km 지점부터 "
             f"{round(length_m, -1):.0f}m 동안 {gain_m:.0f}m 올라가요.")
 
 

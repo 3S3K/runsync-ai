@@ -60,7 +60,7 @@ ELEVATION_PROFILE_MAX_POINTS = 100
 MAX_SLOPE_WINDOW_M = 100.0
 # 오르막 구간을 찾을 때, 이만큼까지 내려갔다 다시 오르는 것은 같은 오르막으로 본다
 CLIMB_DIP_TOLERANCE_M = 2.0
-# 추천 이유에 언급할 만한 오르막의 최소 높이
+# 추천 이유에 언급할 만한 오르막의 최소 높이 (가장 많이 오르는 구간 기준)
 MIN_CLIMB_GAIN_M = 5.0
 
 # 지도에 칠하는 경사 등급의 경계 (구간의 평균 기울기 %)

@@ -66,11 +66,11 @@ def test_hr_bpm_range_spans_model_error_margin():
     assert explain.hr_bpm_range(75.0, None) is None
 
 
-def test_reason_mentions_longest_climb_when_big_enough():
+def test_reason_mentions_biggest_climb_when_big_enough():
     reason = explain.build_reason(COURSE, 5.0, "NORMAL", [], climb=(2810.0, 452.0, 11.3))
-    assert "가장 긴 오르막은 2.8km 지점부터 450m 동안 11m 올라가요." in reason
+    assert "가장 큰 오르막은 2.8km 지점부터 450m 동안 11m 올라가요." in reason
 
 
 def test_reason_skips_small_climb():
     reason = explain.build_reason(COURSE, 5.0, "NORMAL", [], climb=(100.0, 60.0, 2.0))
-    assert "가장 긴 오르막" not in reason
+    assert "가장 큰 오르막" not in reason

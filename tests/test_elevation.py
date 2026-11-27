@@ -70,17 +70,30 @@ def test_max_slope_is_zero_when_only_downhill_or_too_short():
     assert elevation.max_slope_pct([(0, 10.0), (50, 20.0)], 100) == 0
 
 
-def test_longest_climb_picks_biggest_gain_and_ignores_small_dips():
+def test_biggest_climb_picks_biggest_gain_and_ignores_small_dips():
     points = [
         (0, 10.0), (100, 13.0),                    # 작은 오르막 (+3m)
         (200, 8.0),                                # 내리막
         (300, 12.0), (400, 11.0), (500, 20.0),     # 1m 내려갔다 다시 오른다 → 하나의 오르막 (+12m)
         (600, 15.0),
     ]
-    start_m, length_m, gain_m = elevation.longest_climb(points, dip_tolerance_m=2.0)
+    start_m, length_m, gain_m = elevation.biggest_climb(points, dip_tolerance_m=2.0)
     assert (start_m, length_m, gain_m) == (200, 300, 12.0)
 
 
-def test_longest_climb_is_none_without_uphill():
-    assert elevation.longest_climb([(0, 20.0), (100, 15.0), (200, 10.0)], 2.0) is None
-    assert elevation.longest_climb([], 2.0) is None
+def test_biggest_climb_is_none_without_uphill():
+    assert elevation.biggest_climb([(0, 20.0), (100, 15.0), (200, 10.0)], 2.0) is None
+    assert elevation.biggest_climb([], 2.0) is None
+
+
+def test_max_slope_considers_windows_longer_than_minimum():
+    # 0→100m는 1%지만 100→150m에서 가팔라진다. 0→150m(4%)를 놓치면 안 된다
+    points = [(0, 0.0), (100, 1.0), (150, 6.0)]
+    assert elevation.max_slope_pct(points, 100) == pytest.approx(4.0)
+
+
+def test_biggest_climb_is_chosen_by_gain_not_length():
+    # 1000m 동안 10m 오르는 구간보다, 100m 동안 20m 오르는 구간을 고른다
+    points = [(0, 0.0), (1000, 10.0), (1100, 0.0), (1200, 20.0)]
+    assert elevation.biggest_climb(points, dip_tolerance_m=2.0) == (1100, 100, 20.0)
+

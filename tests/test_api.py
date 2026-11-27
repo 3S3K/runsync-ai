@@ -1,4 +1,6 @@
 """API 테스트. 코스 생성 테스트는 전처리가 끝난 로컬 DB가 있어야 하고, 없으면 건너뛴다."""
+import re
+
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
@@ -127,7 +129,7 @@ def test_recommend_returns_distinct_loop_courses(client, target_km):
 
     for course in courses:
         assert abs(course["distanceKm"] - target_km) / target_km <= config.MAX_DISTANCE_ERROR
-        assert course["name"].endswith("순환")
+        assert re.search(r"순환( \d+)?$", course["name"])   # "용운로 순환", "용운로 동쪽 순환 2"
         assert 0 <= course["score"] <= 100
         assert course["estimatedTimeMin"] > 0                      # 최근 기록을 보냈으므로 값이 있다
         assert course["stairsCount"] >= 0

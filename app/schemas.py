@@ -82,7 +82,7 @@ class CourseRes(CamelModel):
     stairs_count: int                           # 계단 구간 수
     hr_zone: str                                # 예상 심박존 (Z1~Z5)
     hr_bpm_range: Optional[List[int]] = None    # 예상 심박수 [최저, 최고]. 나이를 모르면 null
-    longest_climb: Optional[Climb] = None       # 가장 많이 오르는 구간. 오르막이 거의 없으면 null
+    biggest_climb: Optional[Climb] = None       # 가장 많이 오르는 구간(높이 기준). 오르막이 거의 없으면 null
     slope_segments: List[SlopeSegment]          # 경사 등급별로 나눈 경로 (지도에 색을 칠할 때 쓴다)
 
 

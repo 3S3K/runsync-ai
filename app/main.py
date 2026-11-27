@@ -77,7 +77,7 @@ def create_recommendation(request: RecommendReq) -> RecommendRes:
     for rank, (candidate, profile, info) in enumerate(zip(selected, profiles, details), start=1):
         name = detail.course_name(info.main_road, candidate.bearing_deg, used_names)
         used_names.append(name)
-        climb = elevation.longest_climb(profile, config.CLIMB_DIP_TOLERANCE_M)
+        climb = elevation.biggest_climb(profile, config.CLIMB_DIP_TOLERANCE_M)
         has_climb = climb is not None and climb[2] >= config.MIN_CLIMB_GAIN_M
         courses.append(CourseRes(
             rank=rank,
@@ -102,7 +102,7 @@ def create_recommendation(request: RecommendReq) -> RecommendRes:
             stairs_count=info.stairs_count,
             hr_zone=scorer.hr_zone(candidate.predicted_hr_pct),
             hr_bpm_range=explain.hr_bpm_range(candidate.predicted_hr_pct, age),
-            longest_climb=Climb(
+            biggest_climb=Climb(
                 start_m=round(climb[0]), length_m=round(climb[1]), gain_m=round(climb[2]),
             ) if has_climb else None,
             slope_segments=[

@@ -63,21 +63,26 @@ def downsample(points: List[Point], max_points: int) -> List[Point]:
 
 
 def max_slope_pct(points: List[Point], window_m: float) -> float:
-    """window_m 이상 떨어진 두 점 사이에서 가장 가파른 오르막 경사(%). 오르막이 없으면 0."""
+    """window_m 이상 떨어진 두 점 사이에서 가장 가파른 오르막 경사(%). 오르막이 없으면 0.
+
+    최소 길이를 처음 넘는 끝점만 보면, 그 뒤로 더 가팔라지는 구간(예: 0→100m 1%, 100→150m 10%)을
+    놓친다. 그래서 시작점마다 window_m 이상인 끝점을 모두 본다. 점이 수백 개라 부담이 없다.
+    """
     steepest = 0.0
-    end = 0
+    first_end = 0
     for start in range(len(points)):
-        while end < len(points) and points[end][0] - points[start][0] < window_m:
-            end += 1
-        if end == len(points):
-            break
-        run_m = points[end][0] - points[start][0]
-        steepest = max(steepest, (points[end][1] - points[start][1]) / run_m * 100)
+        while first_end < len(points) and points[first_end][0] - points[start][0] < window_m:
+            first_end += 1
+        for end in range(first_end, len(points)):
+            run_m = points[end][0] - points[start][0]
+            steepest = max(steepest, (points[end][1] - points[start][1]) / run_m * 100)
     return steepest
 
 
-def longest_climb(points: List[Point], dip_tolerance_m: float) -> Optional[Tuple[float, float, float]]:
+def biggest_climb(points: List[Point], dip_tolerance_m: float) -> Optional[Tuple[float, float, float]]:
     """가장 많이 오르는 구간의 (시작 거리 m, 길이 m, 오르는 높이 m). 오르막이 없으면 None.
+
+    길이가 아니라 오르는 높이로 고른다. 길고 완만한 오르막보다 짧아도 많이 오르는 구간이 더 힘들다.
 
     dip_tolerance_m까지 잠깐 내려갔다 다시 오르는 것은 같은 오르막으로 본다.
     """
