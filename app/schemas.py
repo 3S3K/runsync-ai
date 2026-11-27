@@ -50,6 +50,11 @@ class Geometry(CamelModel):
     coordinates: List[List[float]]  # [lng, lat]
 
 
+class ElevationPoint(CamelModel):
+    distance_m: int       # 출발점부터의 거리
+    elevation_m: float    # 해발 고도
+
+
 class CourseRes(CamelModel):
     rank: int
     distance_km: float
@@ -59,6 +64,7 @@ class CourseRes(CamelModel):
     intensity: Intensity
     reason: str
     geometry: Geometry
+    elevation_profile: List[ElevationPoint]
 
 
 class RecommendRes(CamelModel):

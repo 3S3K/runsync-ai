@@ -6,7 +6,7 @@
 """
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from psycopg import Connection
@@ -25,6 +25,8 @@ class Candidate:
     overlap_ratio: float  # 같은 구간을 두 번 이상 지나는 거리의 비율
     edge_ids: List[int]
     coordinates: List[List[float]]  # [lng, lat]
+    # edge_ids와 같은 순서. 구간을 source→target 방향으로 지나면 True (고도 프로필에서 쓴다)
+    edge_forward: List[bool] = field(default_factory=list)
     predicted_hr_pct: Optional[float] = None  # 심박 예측 모델이 채운다
 
     @property
@@ -110,6 +112,7 @@ WITH route AS (
     WHERE edge > 0
 ), steps AS (
     SELECT r.seq, w.gid, w.length_m,
+           (r.node = w.source) AS fwd,
            CASE WHEN r.node = w.source THEN w.ascent_m ELSE w.descent_m END AS ascent_m,
            CASE WHEN r.node = w.source THEN w.max_slope_fwd ELSE w.max_slope_rev END AS max_slope,
            CASE WHEN r.node = w.source THEN w.the_geom ELSE ST_Reverse(w.the_geom) END AS geom
@@ -121,6 +124,7 @@ SELECT sum(length_m),
        max(max_slope),
        (SELECT sum(length_m) FROM (SELECT DISTINCT gid, length_m FROM steps) u),
        array_agg(gid ORDER BY seq),
+       array_agg(fwd ORDER BY seq),
        ST_AsGeoJSON(ST_RemoveRepeatedPoints(ST_MakeLine(geom ORDER BY seq)), 6)
 FROM steps
 """
@@ -130,7 +134,8 @@ def _route(conn: Connection, bearing_deg: float, via: List[int], k: float,
            box: Dict[str, float]) -> Optional[Candidate]:
     params = {"steps": config.STEPS_COST_FACTOR, "k": k, "down": config.STEEP_DOWNHILL_EXTRA,
               "via": via, **box}
-    distance_m, ascent_m, max_slope, unique_m, edge_ids, geojson = conn.execute(_ROUTE_SQL, params).fetchone()
+    distance_m, ascent_m, max_slope, unique_m, edge_ids, edge_forward, geojson = conn.execute(
+        _ROUTE_SQL, params).fetchone()
     if not distance_m:
         return None
     return Candidate(
@@ -141,6 +146,7 @@ def _route(conn: Connection, bearing_deg: float, via: List[int], k: float,
         overlap_ratio=1 - unique_m / distance_m,
         edge_ids=edge_ids,
         coordinates=json.loads(geojson)["coordinates"],
+        edge_forward=edge_forward,
     )
 
 
