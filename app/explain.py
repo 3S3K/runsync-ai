@@ -31,16 +31,42 @@ def describe_intensity(predicted_hr_pct: float, intensity: str, age: Optional[in
             f"'{INTENSITY_LABEL[intensity]}' 구간({low:.0f}~{high:.0f}%){fit}.")
 
 
+def estimated_time_min(distance_m: float, records: List[RecentRecord]) -> Optional[int]:
+    """최근 기록의 평균 페이스로 달릴 때 걸리는 시간(분). 기록이 없으면 None."""
+    pace = average_pace_sec_per_km(records)
+    if pace is None:
+        return None
+    return round(pace * distance_m / 1000 / 60)
+
+
+def hr_bpm_range(predicted_hr_pct: float, age: Optional[int]) -> Optional[List[int]]:
+    """예상 심박수 [최저, 최고]. 예측값에서 모델 오차만큼 위아래로 둔다. 나이를 모르면 None."""
+    if age is None:
+        return None
+    max_hr = 220 - age
+    margin = config.HR_RANGE_MARGIN_PCT
+    return [round((predicted_hr_pct - margin) / 100 * max_hr), round((predicted_hr_pct + margin) / 100 * max_hr)]
+
+
+def describe_climb(climb) -> str:
+    """가장 긴 오르막을 설명한다. climb은 (시작 거리 m, 길이 m, 오르는 높이 m)."""
+    start_m, length_m, gain_m = climb
+    return (f" 가장 긴 오르막은 {start_m / 1000:.1f}km 지점부터 "
+            f"{round(length_m, -1):.0f}m 동안 {gain_m:.0f}m 올라가요.")
+
+
 def build_reason(candidate: Candidate, target_km: float, intensity: str,
-                 records: List[RecentRecord], age: Optional[int] = None) -> str:
+                 records: List[RecentRecord], age: Optional[int] = None, climb=None) -> str:
     distance_km = candidate.distance_m / 1000
     reason = (
         f"목표 {target_km:g}km 기준 {distance_km:.1f}km 순환 코스예요. "
         f"누적 오르막은 {candidate.ascent_m:.0f}m예요. "
         + describe_intensity(candidate.predicted_hr_pct, intensity, age)
     )
-    pace = average_pace_sec_per_km(records)
-    if pace is not None:
-        minutes = round(pace * distance_km / 60)
+    if climb is not None and climb[2] >= config.MIN_CLIMB_GAIN_M:
+        reason += describe_climb(climb)
+    minutes = estimated_time_min(candidate.distance_m, records)
+    if minutes is not None:
+        pace = average_pace_sec_per_km(records)
         reason += f" 최근 {len(records)}회 평균 페이스({format_pace(pace)}/km)로 달리면 약 {minutes}분 걸려요."
     return reason

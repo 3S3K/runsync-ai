@@ -4,7 +4,7 @@
 경로의 구간 순서와 진행 방향에 맞춰 이어 붙인다. 추천으로 뽑힌 코스에만 계산한다.
 """
 from itertools import groupby
-from typing import Iterable, List, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 from psycopg import Connection
 
@@ -62,7 +62,44 @@ def downsample(points: List[Point], max_points: int) -> List[Point]:
     return [points[round(i * step)] for i in range(max_points)]
 
 
-def elevation_profile(conn: Connection, candidate: Candidate) -> List[Point]:
+def max_slope_pct(points: List[Point], window_m: float) -> float:
+    """window_m 이상 떨어진 두 점 사이에서 가장 가파른 오르막 경사(%). 오르막이 없으면 0."""
+    steepest = 0.0
+    end = 0
+    for start in range(len(points)):
+        while end < len(points) and points[end][0] - points[start][0] < window_m:
+            end += 1
+        if end == len(points):
+            break
+        run_m = points[end][0] - points[start][0]
+        steepest = max(steepest, (points[end][1] - points[start][1]) / run_m * 100)
+    return steepest
+
+
+def longest_climb(points: List[Point], dip_tolerance_m: float) -> Optional[Tuple[float, float, float]]:
+    """가장 많이 오르는 구간의 (시작 거리 m, 길이 m, 오르는 높이 m). 오르막이 없으면 None.
+
+    dip_tolerance_m까지 잠깐 내려갔다 다시 오르는 것은 같은 오르막으로 본다.
+    """
+    best: Optional[Tuple[float, float, float]] = None
+    if not points:
+        return None
+    low = peak = points[0]
+    for point in points[1:]:
+        if point[1] > peak[1]:
+            peak = point
+        elif point[1] < peak[1] - dip_tolerance_m or point[1] < low[1]:
+            # 정점에서 충분히 내려왔거나 시작점보다 낮아졌다 → 지금까지의 오르막을 마감한다
+            if peak[1] - low[1] > 0 and (best is None or peak[1] - low[1] > best[2]):
+                best = (low[0], peak[0] - low[0], peak[1] - low[1])
+            low = peak = point
+    if peak[1] - low[1] > 0 and (best is None or peak[1] - low[1] > best[2]):
+        best = (low[0], peak[0] - low[0], peak[1] - low[1])
+    return best
+
+
+def full_profile(conn: Connection, candidate: Candidate) -> List[Point]:
+    """솎아 내기 전의 전체 프로필. 최대 경사와 오르막 구간은 이것으로 계산한다."""
     rows = conn.execute(
         _PROFILE_SQL, {"edges": candidate.edge_ids, "forward": candidate.edge_forward}).fetchall()
-    return downsample(build_profile(rows), config.ELEVATION_PROFILE_MAX_POINTS)
+    return build_profile(rows)
